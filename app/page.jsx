@@ -109,7 +109,21 @@ export default function Home() {
     if (!replyText.trim() || !session?.accessToken) return
     setReplyLoading(true)
     try {
-      const detectedLang = translations[email.id]?.detectedLangCode || translations[email.id]?.detectedLang || 'en'
+      let detectedLang = translations[email.id]?.detectedLangCode || translations[email.id]?.detectedLang
+      // If we haven't translated yet (or detection is missing), detect via /api/translate.
+      // This avoids accidentally translating replies into English by default.
+      if (!detectedLang || detectedLang === 'auto') {
+        const detectRes = await fetch('/api/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: email.body, targetLang: prefLang }),
+        })
+        const detectData = await detectRes.json()
+        if (detectData.error) throw new Error(detectData.error)
+        setTranslations(t => ({ ...t, [email.id]: detectData }))
+        detectedLang = detectData.detectedLangCode || detectData.detectedLang
+      }
+      detectedLang = detectedLang || 'en'
       const matchEmail = email.from.match(/<(.+)>/)
       const toEmail = matchEmail ? matchEmail[1] : email.from
 
